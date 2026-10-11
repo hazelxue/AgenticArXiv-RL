@@ -57,6 +57,10 @@ if _missing:
 WORK = Path("/kaggle/working")
 REPO = WORK / "AgenticArXiv-RL"
 MARKS = WORK / "marks"
+# Trainer checkpoints (fp32 weights + Adam states, ~6 GB each, up to 4 on disk at once) do not fit
+# the 19.5 GB /kaggle/working quota; /kaggle/temp is the larger scratch disk. Only the small
+# artifacts (manifests, eval summaries, round dir) are copied back into /kaggle/working.
+OUTPUTS = Path("/kaggle/temp/outputs")
 
 # kaggle/round1 = PR-2 branch (self_evolve mix + targeted wrapper set) + the trainable-model
 # dtype fix (fix/trainable-model-dtype): without it --no-qlora loads Qwen in bf16 and the T4
@@ -116,6 +120,8 @@ def setup() -> None:
     )
     for name in sft_inputs:
         shutil.copy(INPUT / name, REPO / "data" / "sft" / name)
+    OUTPUTS.mkdir(parents=True, exist_ok=True)
+    sh("df -h /kaggle/working /kaggle/temp")
     sh([sys.executable, "-c",
         "import torch, transformers, trl; print('cuda', torch.cuda.is_available(), torch.cuda.get_device_name(0), "
         "'bf16', torch.cuda.is_bf16_supported(), 'torch', torch.__version__, 'transformers', transformers.__version__, "
@@ -140,12 +146,12 @@ def evaluate(model_dir: str, out_root: str) -> None:
 
 @step("10_train_round0")
 def train_round0() -> None:
-    train("data/sft/sft_v3_train_mix.jsonl", "outputs/round0")
+    train("data/sft/sft_v3_train_mix.jsonl", str(OUTPUTS / "round0"))
 
 
 @step("11_eval_round0")
 def eval_round0() -> None:
-    evaluate("outputs/round0/final", "eval/round0")
+    evaluate(str(OUTPUTS / "round0" / "final"), "eval/round0")
 
 
 @step("20_self_evolve_run")
@@ -167,12 +173,12 @@ def augment_and_mix() -> None:
 
 @step("30_train_round1")
 def train_round1() -> None:
-    train("artifacts/self_evolve/round_1/train_mix.jsonl", "outputs/round1")
+    train("artifacts/self_evolve/round_1/train_mix.jsonl", str(OUTPUTS / "round1"))
 
 
 @step("31_eval_round1")
 def eval_round1() -> None:
-    evaluate("outputs/round1/final", "eval/round1")
+    evaluate(str(OUTPUTS / "round1" / "final"), "eval/round1")
 
 
 @step("40_gate")
@@ -204,7 +210,7 @@ def collect() -> None:
                 if (src / name).exists():
                     shutil.copy(src / name, bundle / rnd / split / name)
     for rnd in ("round0", "round1"):
-        man = REPO / f"outputs/{rnd}/final/training_manifest.json"
+        man = OUTPUTS / rnd / "final" / "training_manifest.json"
         if man.exists():
             shutil.copy(man, bundle / f"{rnd}_training_manifest.json")
     shutil.make_archive(str(WORK / "round1_results"), "gztar", root_dir=str(bundle))
