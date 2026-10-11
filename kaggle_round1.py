@@ -11,7 +11,8 @@ Expected Kaggle Dataset "agenticarxiv-round1" (upload from F:/oss-work/pr2_data 
     kaggle_round1.py                             this file
 
 Every step writes a marker so a restarted session resumes where it stopped (Kaggle caps a
-session at 12 h; the whole round takes roughly 4-6 h on a T4).
+session at 12 h). Measured on a T4: 17 s per optimizer step with fp32 master weights at max_length 3072,
+so 2 epochs x 2 rounds (1890 steps, ~9 h) plus evals would overrun the cap; 1 epoch per round fits.
 
 Why Qwen2.5-0.5B and full fine-tuning: the repo's frozen QLoRA recipe requires bf16, which the
 T4/P100 do not support, and a 1.5B full fine-tune does not fit 16 GB. The round is still a
@@ -69,7 +70,7 @@ EVAL_SPLITS = ("dev", "iid_test", "ood_test")
 # max_length 3072 > longest sample (2676 tokens), so nothing is truncated, while the fp32 logits
 # of a 152k vocab stay inside the T4's 16 GB.
 TRAIN_ARGS = [
-    "--no-qlora", "--epochs", "2", "--batch_size", "1", "--grad_accum", "8", "--lr", "1e-5",
+    "--no-qlora", "--epochs", "1", "--batch_size", "1", "--grad_accum", "8", "--lr", "1e-5",
     "--max_length", "3072", "--optim", "adamw_torch", "--no-verify", "--report_to", "none",
 ]
 
