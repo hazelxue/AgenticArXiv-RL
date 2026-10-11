@@ -141,6 +141,10 @@ def evaluate(model_dir: str, out_root: str) -> None:
         sh([sys.executable, "-m", "AgenticArxiv.benchmark.run_benchmark", "--backend", "transformers",
             "--model", model_dir, "--local-device", "cuda", "--local-dtype", "float16", "--offline",
             "--snapshot", SNAPSHOT, "--task-set", "expanded", "--split", f"{SPLIT}:{split}",
+            # Only the ReAct agent the SFT trains. run_benchmark defaults to regex+mcp+skill_cli, and
+            # self_evolve groups summary rows by task_id only, so a multi-agent summary would mix
+            # the mcp agent (needs the `mcp` package, absent here) and skill_cli into pass^3.
+            "--agents", "regex",
             "--repeat", "3", "--seed", "45", "--output", out, "--save-traces", f"{out}/traces.jsonl"])
 
 
